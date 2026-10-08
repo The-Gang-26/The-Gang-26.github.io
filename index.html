@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>The Gang</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+  <!-- Loading -->
+  <div id="loading" class="screen">
+    <div class="spinner"></div>
+  </div>
+
+  <!-- Login -->
+  <div id="login-screen" class="screen hidden">
+    <div class="card">
+      <h1>The Gang</h1>
+      <p class="subtitle">Members only.</p>
+      <button id="google-signin" class="btn btn-primary">
+        Sign in with Google
+      </button>
+      <p id="login-error" class="error hidden"></p>
+    </div>
+  </div>
+
+  <!-- Signed in, but not on the list -->
+  <div id="not-member-screen" class="screen hidden">
+    <div class="card">
+      <h1>Not so fast</h1>
+      <p>You're signed in as <strong id="not-member-email"></strong>, but you're not on the list.</p>
+      <p class="muted">Send this UID to the admin:</p>
+      <code id="not-member-uid" class="uid"></code>
+      <button id="signout-nonmember" class="btn">Sign out</button>
+    </div>
+  </div>
+
+  <!-- The app -->
+  <div id="app-screen" class="screen hidden">
+    <header>
+      <h1>The Gang</h1>
+      <div class="user">
+        <img id="user-photo" alt="" />
+        <span id="user-name"></span>
+        <button id="signout" class="btn btn-ghost">Sign out</button>
+      </div>
+    </header>
+
+    <main>
+      <section class="composer">
+        <textarea id="post-text" placeholder="Say something to the gang…" maxlength="2000"></textarea>
+        <button id="post-btn" class="btn btn-primary">Post</button>
+      </section>
+
+      <section id="feed"></section>
+    </main>
+  </div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
