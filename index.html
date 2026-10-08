@@ -9,34 +9,74 @@
 <body>
 
   <!-- Loading -->
-  <div id="loading" class="screen">
+  <div id="loading-screen" class="screen">
     <div class="spinner"></div>
   </div>
 
-  <!-- Login -->
+  <!-- Sign in / sign up -->
   <div id="login-screen" class="screen hidden">
     <div class="card">
       <h1>The Gang</h1>
       <p class="subtitle">Members only.</p>
-      <button id="google-signin" class="btn btn-primary">
-        Sign in with Google
+
+      <button id="google-signin" class="btn btn-google">
+        <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
+          <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.6 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.6 6.1 29.6 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.3-.4-3.5z"/>
+          <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.6 6.1 29.6 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/>
+          <path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.3 0-9.7-3.4-11.3-8l-6.5 5C9.6 39.6 16.2 44 24 44z"/>
+          <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.3 4.3-4.1 5.6l6.2 5.2C36.9 39.1 44 34 44 24c0-1.3-.1-2.3-.4-3.5z"/>
+        </svg>
+        Continue with Google
       </button>
+
+      <div class="divider"><span>or</span></div>
+
+      <form id="email-form" novalidate>
+        <input id="email" type="email" placeholder="Email" autocomplete="email" required />
+        <input id="password" type="password" placeholder="Password" autocomplete="current-password" required minlength="6" />
+        <button type="submit" id="email-submit" class="btn btn-primary">Sign in</button>
+      </form>
+
+      <div class="login-links">
+        <a href="#" id="toggle-mode">Create an account</a>
+        <a href="#" id="forgot-password">Forgot password?</a>
+      </div>
+
       <p id="login-error" class="error hidden"></p>
     </div>
   </div>
 
-  <!-- Signed in, but not on the list -->
-  <div id="not-member-screen" class="screen hidden">
+  <!-- Verify email (email/password users) -->
+  <div id="verify-screen" class="screen hidden">
     <div class="card">
-      <h1>Not so fast</h1>
-      <p>You're signed in as <strong id="not-member-email"></strong>, but you're not on the list.</p>
-      <p class="muted">Send this UID to the admin:</p>
-      <code id="not-member-uid" class="uid"></code>
-      <button id="signout-nonmember" class="btn">Sign out</button>
+      <h1>Check your inbox</h1>
+      <p class="subtitle">
+        We sent a verification link to<br />
+        <strong id="verify-email-addr"></strong>
+      </p>
+      <button id="refresh-verify" class="btn btn-primary">I've verified — continue</button>
+      <button id="resend-verify" class="btn">Resend email</button>
+      <button id="signout-verify" class="btn btn-ghost">Sign out</button>
+      <p id="verify-error" class="error hidden"></p>
     </div>
   </div>
 
-  <!-- The app -->
+  <!-- Group gate -->
+  <div id="gate-screen" class="screen hidden">
+    <div class="card">
+      <h1>Almost in</h1>
+      <p class="subtitle">Enter the group code.</p>
+      <form id="gate-form">
+        <input id="gate-code" type="password" placeholder="Group code"
+               autocomplete="off" autocapitalize="off" spellcheck="false" required />
+        <button type="submit" class="btn btn-primary">Unlock</button>
+      </form>
+      <p id="gate-error" class="error hidden"></p>
+      <button id="signout-gate" class="btn btn-ghost">Sign out</button>
+    </div>
+  </div>
+
+  <!-- The Gang -->
   <div id="app-screen" class="screen hidden">
     <header>
       <h1>The Gang</h1>
@@ -52,7 +92,6 @@
         <textarea id="post-text" placeholder="Say something to the gang…" maxlength="2000"></textarea>
         <button id="post-btn" class="btn btn-primary">Post</button>
       </section>
-
       <section id="feed"></section>
     </main>
   </div>
