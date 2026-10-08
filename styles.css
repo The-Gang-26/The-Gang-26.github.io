@@ -48,7 +48,6 @@ html, body {
 .subtitle { color: var(--muted); margin: 0 0 24px; line-height: 1.5; font-size: 14px; }
 .muted { color: var(--muted); font-size: 14px; }
 
-/* Forms */
 form { display: flex; flex-direction: column; gap: 10px; }
 input[type="email"], input[type="password"] {
   width: 100%;
@@ -65,7 +64,6 @@ input[type="email"], input[type="password"] {
 input[type="email"]:focus, input[type="password"]:focus { border-color: var(--accent); }
 input::placeholder { color: var(--muted); }
 
-/* Buttons */
 .btn {
   display: inline-flex;
   align-items: center; justify-content: center; gap: 8px;
@@ -90,33 +88,8 @@ input::placeholder { color: var(--muted); }
 }
 .btn-primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
 
-.btn-google {
-  width: 100%;
-  background: #ffffff;
-  color: #1f1f1f;
-  border-color: #ffffff;
-  font-weight: 500;
-}
-.btn-google:hover { background: #ececec; border-color: #ececec; }
-
 .btn-ghost { background: transparent; }
 
-/* Divider */
-.divider {
-  display: flex; align-items: center;
-  gap: 12px;
-  color: var(--muted);
-  font-size: 12px;
-  margin: 20px 0;
-}
-.divider::before, .divider::after {
-  content: "";
-  flex: 1;
-  height: 1px;
-  background: var(--border);
-}
-
-/* Login links */
 .login-links {
   display: flex; justify-content: space-between;
   margin-top: 16px;
@@ -132,7 +105,6 @@ input::placeholder { color: var(--muted); }
   line-height: 1.4;
 }
 
-/* App */
 #app-screen {
   display: block;
   min-height: 100vh;
