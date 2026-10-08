@@ -125,6 +125,7 @@ input::placeholder { color: var(--muted); }
 
 main { max-width: 640px; margin: 0 auto; padding: 24px; }
 
+/* Composer */
 .composer {
   background: var(--panel);
   border: 1px solid var(--border);
@@ -138,8 +139,52 @@ main { max-width: 640px; margin: 0 auto; padding: 24px; }
   color: var(--text); font-family: inherit; font-size: 15px; line-height: 1.5;
 }
 .composer textarea::placeholder { color: var(--muted); }
-.composer .btn-primary { width: auto; margin-left: auto; display: block; }
 
+.composer-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+.composer-actions .btn-primary {
+  margin-left: auto;
+  width: auto;
+}
+
+/* Media preview */
+.media-preview {
+  position: relative;
+  margin-top: 12px;
+  border-radius: 8px;
+  overflow: hidden;
+  max-width: 320px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+}
+.media-preview img, .media-preview video {
+  display: block;
+  width: 100%;
+  max-height: 260px;
+  object-fit: cover;
+}
+.media-remove {
+  position: absolute;
+  top: 6px; right: 6px;
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0, 0, 0, 0.7);
+  color: #fff;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.media-remove:hover { background: rgba(0, 0, 0, 0.9); }
+
+/* Posts */
 .post {
   background: var(--panel);
   border: 1px solid var(--border);
@@ -152,7 +197,20 @@ main { max-width: 640px; margin: 0 auto; padding: 24px; }
 .post-head img { width: 32px; height: 32px; border-radius: 50%; }
 .post-author { font-weight: 600; font-size: 14px; }
 .post-time { color: var(--muted); font-size: 12px; }
-.post-text { font-size: 15px; line-height: 1.55; white-space: pre-wrap; word-wrap: break-word; }
+.post-text {
+  font-size: 15px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+.post-media {
+  display: block;
+  margin-top: 12px;
+  max-width: 100%;
+  max-height: 500px;
+  border-radius: 8px;
+  background: #000;
+}
 .post-delete {
   position: absolute; top: 12px; right: 12px;
   background: transparent; border: none;
