@@ -8,11 +8,20 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+// ---------- Constants ----------
+const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25 MB
+const ALLOWED_TYPES = [
+  'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+  'video/mp4', 'video/webm',
+];
+const SIGNED_URL_TTL = 3600; // seconds
+
 // ---------- DOM ----------
 const $ = (id) => document.getElementById(id);
 const screens = {
   loading: $('loading-screen'),
   login: $('login-screen'),
+  recovery: $('recovery-screen'),
   gate: $('gate-screen'),
   app: $('app-screen'),
 };
@@ -22,27 +31,40 @@ function showScreen(name) {
   screens[name].classList.remove('hidden');
 }
 
+// ---------- State ----------
+let currentUser = null;
+let feedChannel = null;
+let inRecovery = false;
+let routeToken = 0;
+let pendingFile = null;
+
 // ---------- Routing ----------
 async function route() {
+  if (inRecovery) return;
+
+  const myToken = ++routeToken;
   showScreen('loading');
 
   const { data: { session } } = await supabase.auth.getSession();
+  if (myToken !== routeToken) return;
+
   if (!session) {
+    cleanupSession();
     showScreen('login');
     return;
   }
 
   const member = await checkMembership();
+  if (myToken !== routeToken) return;
+
   if (member) {
     showApp(session.user);
   } else {
+    currentUser = session.user;
     showScreen('gate');
   }
 }
 
-// Membership check: call the server-side is_member() function.
-// It's security definer, so it can read `members` even though
-// the client cannot.
 async function checkMembership() {
   const { data, error } = await supabase.rpc('is_member');
   if (error) {
@@ -52,7 +74,37 @@ async function checkMembership() {
   return data === true;
 }
 
-supabase.auth.onAuthStateChange(() => route());
+function cleanupSession() {
+  if (feedChannel) {
+    supabase.removeChannel(feedChannel);
+    feedChannel = null;
+  }
+  currentUser = null;
+  clearPendingFile();
+}
+
+// ---------- Auth listener ----------
+// Supabase warns against awaiting Supabase calls inside this callback
+// (it can deadlock the client). Defer with setTimeout.
+supabase.auth.onAuthStateChange((event) => {
+  if (event === 'PASSWORD_RECOVERY') {
+    inRecovery = true;
+    showScreen('recovery');
+    $('new-password').value = '';
+    clearError('recovery-error');
+    return;
+  }
+
+  if (event === 'SIGNED_OUT') {
+    inRecovery = false;
+    cleanupSession();
+  }
+
+  setTimeout(() => route(), 0);
+});
+
+// Kick things off.
+route();
 
 // ---------- Login / signup ----------
 let mode = 'signin';
@@ -119,6 +171,25 @@ $('forgot-password').addEventListener('click', async (e) => {
   }
 });
 
+// ---------- Recovery ----------
+$('recovery-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  clearError('recovery-error');
+
+  const newPassword = $('new-password').value;
+  const { error } = await supabase.auth.updateUser({ password: newPassword });
+
+  if (error) {
+    showError('recovery-error', error.message);
+    return;
+  }
+
+  // Clear the recovery token from the URL and drop back into the app.
+  inRecovery = false;
+  window.history.replaceState(null, '', window.location.pathname);
+  route();
+});
+
 // ---------- Gate ----------
 $('gate-form').addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -149,9 +220,6 @@ $('signout-gate').addEventListener('click', async () => {
 });
 
 // ---------- App ----------
-let feedChannel = null;
-let currentUser = null;
-
 function showApp(user) {
   currentUser = user;
   $('user-name').textContent = user.email || 'member';
@@ -217,11 +285,29 @@ async function loadFeed() {
     return;
   }
 
+  // Batch-fetch signed URLs for all media in the feed (one request).
+  const mediaPaths = [...new Set(
+    data.filter((p) => p.media_path).map((p) => p.media_path)
+  )];
+
+  const signedUrls = {};
+  if (mediaPaths.length > 0) {
+    const { data: signed, error: signErr } = await supabase
+      .storage.from('media')
+      .createSignedUrls(mediaPaths, SIGNED_URL_TTL);
+
+    if (!signErr && signed) {
+      signed.forEach((item) => {
+        if (!item.error && item.signedUrl) signedUrls[item.path] = item.signedUrl;
+      });
+    }
+  }
+
   const uid = currentUser?.id;
-  data.forEach((post) => feed.appendChild(renderPost(post, uid)));
+  data.forEach((post) => feed.appendChild(renderPost(post, uid, signedUrls)));
 }
 
-function renderPost(post, currentUid) {
+function renderPost(post, currentUid, signedUrls) {
   const article = document.createElement('article');
   article.className = 'post';
 
@@ -246,10 +332,31 @@ function renderPost(post, currentUid) {
   head.appendChild(meta);
   article.appendChild(head);
 
-  const text = document.createElement('div');
-  text.className = 'post-text';
-  text.textContent = post.text || '';
-  article.appendChild(text);
+  if (post.text) {
+    const text = document.createElement('div');
+    text.className = 'post-text';
+    text.textContent = post.text;
+    article.appendChild(text);
+  }
+
+  if (post.media_path && signedUrls[post.media_path]) {
+    const url = signedUrls[post.media_path];
+    if (post.media_type === 'image') {
+      const img = document.createElement('img');
+      img.className = 'post-media';
+      img.src = url;
+      img.alt = '';
+      img.loading = 'lazy';
+      article.appendChild(img);
+    } else if (post.media_type === 'video') {
+      const video = document.createElement('video');
+      video.className = 'post-media';
+      video.src = url;
+      video.controls = true;
+      video.preload = 'metadata';
+      article.appendChild(video);
+    }
+  }
 
   if (post.author_id === currentUid) {
     const del = document.createElement('button');
@@ -257,13 +364,22 @@ function renderPost(post, currentUid) {
     del.textContent = 'delete';
     del.addEventListener('click', async () => {
       if (!confirm('Delete this post?')) return;
-      const { error } = await supabase.from('posts').delete().eq('id', post.id);
-      if (error) alert("Couldn't delete: " + error.message);
+      await deletePost(post);
     });
     article.appendChild(del);
   }
 
   return article;
+}
+
+async function deletePost(post) {
+  // Delete media file first (ignore failures — orphaned files are
+  // harmless and much better than orphaned post rows).
+  if (post.media_path) {
+    await supabase.storage.from('media').remove([post.media_path]);
+  }
+  const { error } = await supabase.from('posts').delete().eq('id', post.id);
+  if (error) alert("Couldn't delete: " + error.message);
 }
 
 function formatTime(ts) {
@@ -280,26 +396,113 @@ function formatTime(ts) {
 // ---------- Composer ----------
 const postBtn = $('post-btn');
 const postText = $('post-text');
+const attachBtn = $('attach-btn');
+const fileInput = $('file-input');
+const mediaPreview = $('media-preview');
+const mediaPreviewContent = $('media-preview-content');
+const mediaRemove = $('media-remove');
+
+attachBtn.addEventListener('click', () => fileInput.click());
+
+fileInput.addEventListener('change', () => {
+  const file = fileInput.files?.[0];
+  fileInput.value = '';
+  if (!file) return;
+
+  if (file.size > MAX_FILE_SIZE) {
+    alert(`File too large. Max ${Math.round(MAX_FILE_SIZE / 1024 / 1024)} MB.`);
+    return;
+  }
+  if (!ALLOWED_TYPES.includes(file.type)) {
+    alert('Unsupported file type.');
+    return;
+  }
+
+  clearPendingFile();
+
+  pendingFile = file;
+  const url = URL.createObjectURL(file);
+  mediaPreviewContent.innerHTML = '';
+
+  if (file.type.startsWith('image/')) {
+    const img = document.createElement('img');
+    img.src = url;
+    img.alt = '';
+    mediaPreviewContent.appendChild(img);
+  } else {
+    const video = document.createElement('video');
+    video.src = url;
+    video.controls = true;
+    video.muted = true;
+    mediaPreviewContent.appendChild(video);
+  }
+
+  mediaPreview.dataset.objectUrl = url;
+  mediaPreview.classList.remove('hidden');
+});
+
+mediaRemove.addEventListener('click', () => clearPendingFile());
+
+function clearPendingFile() {
+  pendingFile = null;
+  const url = mediaPreview.dataset.objectUrl;
+  if (url) URL.revokeObjectURL(url);
+  delete mediaPreview.dataset.objectUrl;
+  mediaPreviewContent.innerHTML = '';
+  mediaPreview.classList.add('hidden');
+}
 
 postBtn.addEventListener('click', async () => {
   const text = postText.value.trim();
-  if (!text) return;
+  const file = pendingFile;
+
+  if (!text && !file) return;
   if (!currentUser) return;
 
   postBtn.disabled = true;
+  attachBtn.disabled = true;
+  const originalLabel = postBtn.textContent;
+  postBtn.textContent = file ? 'Uploading…' : 'Posting…';
+
   try {
-    const { error } = await supabase.from('posts').insert({
+    let mediaPath = null;
+    let mediaType = null;
+
+    if (file) {
+      const ext = (file.name.split('.').pop() || 'bin').toLowerCase().replace(/[^a-z0-9]/g, '');
+      const uuid = crypto.randomUUID();
+      mediaPath = `${currentUser.id}/${uuid}.${ext}`;
+      mediaType = file.type.startsWith('image/') ? 'image'
+                : file.type.startsWith('video/') ? 'video'
+                : null;
+
+      const { error: uploadErr } = await supabase
+        .storage.from('media')
+        .upload(mediaPath, file, {
+          contentType: file.type,
+          upsert: false,
+        });
+      if (uploadErr) throw uploadErr;
+    }
+
+    const { error: insertErr } = await supabase.from('posts').insert({
       author_id: currentUser.id,
       author_name: currentUser.email || 'member',
       author_photo: currentUser.user_metadata?.avatar_url || '',
       text,
+      media_path: mediaPath,
+      media_type: mediaType,
     });
-    if (error) throw error;
+    if (insertErr) throw insertErr;
+
     postText.value = '';
+    clearPendingFile();
   } catch (err) {
     alert("Couldn't post: " + err.message);
   } finally {
     postBtn.disabled = false;
+    attachBtn.disabled = false;
+    postBtn.textContent = originalLabel;
   }
 });
 
