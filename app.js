@@ -7,7 +7,6 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   sendPasswordResetEmail,
-  sendEmailVerification,
   signOut,
   onAuthStateChanged,
 } from "https://www.gstatic.com/firebasejs/13.0.0/firebase-auth.js";
@@ -47,7 +46,6 @@ const $ = (id) => document.getElementById(id);
 const screens = {
   loading: $("loading-screen"),
   login: $("login-screen"),
-  verify: $("verify-screen"),
   gate: $("gate-screen"),
   app: $("app-screen"),
 };
@@ -56,20 +54,10 @@ function showScreen(name) {
   screens[name].classList.remove("hidden");
 }
 
-// ---------- Auth providers ----------
-const googleProvider = new GoogleAuthProvider();
-
 // ---------- Routing ----------
-// Runs after every auth change. Decides which screen the user sees.
 async function route(user) {
   if (!user) return showScreen("login");
-  // Bail if the user changed while we were awaiting.
   if (auth.currentUser?.uid !== user.uid) return;
-
-  if (!user.emailVerified) {
-    $("verify-email-addr").textContent = user.email || "";
-    return showScreen("verify");
-  }
 
   const member = await checkMembership();
   if (auth.currentUser?.uid !== user.uid) return;
@@ -78,8 +66,6 @@ async function route(user) {
   else showScreen("gate");
 }
 
-// Membership is enforced by the rules on /posts. If we can read a post,
-// we're a member. If the rules deny the read, we're not.
 async function checkMembership() {
   try {
     await getDocs(query(collection(db, "posts"), limit(1)));
@@ -96,6 +82,8 @@ async function checkMembership() {
 onAuthStateChanged(auth, route);
 
 // ---------- Google sign-in ----------
+const googleProvider = new GoogleAuthProvider();
+
 $("google-signin").addEventListener("click", async () => {
   clearError("login-error");
   try {
@@ -105,8 +93,8 @@ $("google-signin").addEventListener("click", async () => {
   }
 });
 
-// ---------- Email/password sign-in & sign-up ----------
-let mode = "signin"; // or "signup"
+// ---------- Email/password ----------
+let mode = "signin";
 
 function applyMode() {
   const isSignup = mode === "signup";
@@ -132,10 +120,8 @@ $("email-form").addEventListener("submit", async (e) => {
 
   try {
     if (mode === "signup") {
-      const cred = await createUserWithEmailAndPassword(auth, email, password);
-      // Send the verification email. Until they click it, rules will
-      // refuse to let them join /members even if they know the gate code.
-      await sendEmailVerification(cred.user);
+      await createUserWithEmailAndPassword(auth, email, password);
+      // No verification email — straight to the gate screen.
     } else {
       await signInWithEmailAndPassword(auth, email, password);
     }
@@ -164,39 +150,7 @@ $("forgot-password").addEventListener("click", async (e) => {
   }
 });
 
-// ---------- Verify screen ----------
-$("resend-verify").addEventListener("click", async () => {
-  clearError("verify-error");
-  if (!auth.currentUser) return;
-  try {
-    await sendEmailVerification(auth.currentUser);
-    showError("verify-error", "Sent. Check your inbox.");
-    $("verify-error").style.color = "var(--muted)";
-  } catch (err) {
-    $("verify-error").style.color = "";
-    showError("verify-error", prettyAuthError(err));
-  }
-});
-
-$("refresh-verify").addEventListener("click", async () => {
-  clearError("verify-error");
-  if (!auth.currentUser) return;
-  try {
-    await auth.currentUser.reload();
-  } catch (err) {
-    showError("verify-error", prettyAuthError(err));
-    return;
-  }
-  if (auth.currentUser.emailVerified) {
-    route(auth.currentUser);
-  } else {
-    showError("verify-error", "Still not verified. Click the link in your inbox first.");
-  }
-});
-
-$("signout-verify").addEventListener("click", () => signOut(auth));
-
-// ---------- Gate screen ----------
+// ---------- Gate ----------
 $("gate-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   clearError("gate-error");
@@ -206,9 +160,6 @@ $("gate-form").addEventListener("submit", async (e) => {
   const user = auth.currentUser;
   if (!user) return;
 
-  // Attempt to create our membership doc. The rules will only allow this
-  // if the submitted code matches the secret one in /config/gate.
-  // Success = we're in. Permission denied = wrong code.
   try {
     await setDoc(doc(db, "members", user.uid), {
       code,
@@ -220,8 +171,6 @@ $("gate-form").addEventListener("submit", async (e) => {
       showError("gate-error", "Something went wrong. Try again.");
       return;
     }
-    // Fall through — we probe below to disambiguate
-    // "wrong code" from "already a member".
   }
 
   const member = await checkMembership();
@@ -237,7 +186,7 @@ $("gate-form").addEventListener("submit", async (e) => {
 
 $("signout-gate").addEventListener("click", () => signOut(auth));
 
-// ---------- The app ----------
+// ---------- App ----------
 let unsubscribeFeed = null;
 
 function showApp(user) {
