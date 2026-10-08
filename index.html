@@ -32,6 +32,19 @@
     </div>
   </div>
 
+  <div id="recovery-screen" class="screen hidden">
+    <div class="card">
+      <h1>Set a new password</h1>
+      <p class="subtitle">Choose a new password for your account.</p>
+      <form id="recovery-form">
+        <input id="new-password" type="password" placeholder="New password"
+               autocomplete="new-password" minlength="6" required />
+        <button type="submit" class="btn btn-primary">Update password</button>
+      </form>
+      <p id="recovery-error" class="error hidden"></p>
+    </div>
+  </div>
+
   <div id="gate-screen" class="screen hidden">
     <div class="card">
       <h1>Almost in</h1>
@@ -59,8 +72,19 @@
     <main>
       <section class="composer">
         <textarea id="post-text" placeholder="Say something to the gang…" maxlength="2000"></textarea>
-        <button id="post-btn" class="btn btn-primary">Post</button>
+
+        <div id="media-preview" class="media-preview hidden">
+          <div id="media-preview-content"></div>
+          <button type="button" id="media-remove" class="media-remove" aria-label="Remove">×</button>
+        </div>
+
+        <div class="composer-actions">
+          <button type="button" id="attach-btn" class="btn">📎 Attach</button>
+          <input type="file" id="file-input" accept="image/jpeg,image/png,image/gif,image/webp,video/mp4,video/webm" hidden />
+          <button id="post-btn" class="btn btn-primary">Post</button>
+        </div>
       </section>
+
       <section id="feed"></section>
     </main>
   </div>
