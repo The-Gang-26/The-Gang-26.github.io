@@ -6,11 +6,12 @@ import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js
 const SUPABASE_URL = 'https://seizegwhxlyfnwiztcvg.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNlaXplZ3doeGx5Zm53aXp0Y3ZnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE0ODk0NDIsImV4cCI6MjEwNzA2NTQ0Mn0.D_VB6Q1AC0fi6KQ-LfgkIkp-L48LECS0a33NhTl-_RU';
 
-// Capture BEFORE createClient — the SDK may clear the hash.
-const INITIAL_HASH = window.location.hash || '';
+// Capture BEFORE createClient — the SDK clears the hash/query
+// once it processes the recovery link.
+const INITIAL_URL = window.location.href;
 const IS_RECOVERY_TAB =
-  INITIAL_HASH.includes('type=recovery') ||
-  INITIAL_HASH.includes('error_description=recovery');
+  INITIAL_URL.includes('type=recovery') ||
+  INITIAL_URL.includes('error_description=recovery');
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -46,12 +47,17 @@ let pendingFile = null;
 
 // ---------- Routing ----------
 async function route() {
+  // If recovery is active, never override its screen.
   if (inRecovery) return;
 
   const myToken = ++routeToken;
   showScreen('loading');
 
   const { data: { session } } = await supabase.auth.getSession();
+
+  // Re-check after every await. The recovery event can fire
+  // while we're suspended here.
+  if (inRecovery) return;
   if (myToken !== routeToken) return;
 
   if (!session) {
@@ -61,6 +67,8 @@ async function route() {
   }
 
   const member = await checkMembership();
+
+  if (inRecovery) return;
   if (myToken !== routeToken) return;
 
   if (member) {
@@ -95,11 +103,14 @@ function cleanupSession() {
 supabase.auth.onAuthStateChange((event) => {
   if (event === 'PASSWORD_RECOVERY') {
     // Only the tab that actually opened the recovery link should
-    // show the recovery screen. Other tabs see this event too
-    // because auth state syncs via localStorage — ignore it there.
+    // show the recovery screen. Other tabs see auth state change
+    // via localStorage but not this event — still, guard anyway.
     if (!IS_RECOVERY_TAB) return;
 
     inRecovery = true;
+    // Bump the route token so any in-flight route() bails out
+    // even before it hits its own inRecovery check.
+    routeToken++;
     showScreen('recovery');
     $('new-password').value = '';
     clearError('recovery-error');
@@ -265,8 +276,6 @@ function subscribeToFeed() {
       'postgres_changes',
       { event: '*', schema: 'public', table: 'posts' },
       (payload) => {
-        // Any change to posts → refetch. Simpler than patching in place
-        // and always correct.
         loadFeed();
       }
     )
@@ -530,9 +539,6 @@ postBtn.addEventListener('click', async () => {
 
     postText.value = '';
     clearPendingFile();
-    // The realtime subscription will refetch. No manual loadFeed()
-    // here so we don't double-fetch — but if realtime is off, the
-    // focus fallback catches it on next tab focus.
   } catch (err) {
     alert("Couldn't post: " + err.message);
   } finally {
