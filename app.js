@@ -6,6 +6,12 @@ import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js
 const SUPABASE_URL = 'https://seizegwhxlyfnwiztcvg.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNlaXplZ3doeGx5Zm53aXp0Y3ZnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE0ODk0NDIsImV4cCI6MjEwNzA2NTQ0Mn0.D_VB6Q1AC0fi6KQ-LfgkIkp-L48LECS0a33NhTl-_RU';
 
+// Capture BEFORE createClient — the SDK may clear the hash.
+const INITIAL_HASH = window.location.hash || '';
+const IS_RECOVERY_TAB =
+  INITIAL_HASH.includes('type=recovery') ||
+  INITIAL_HASH.includes('error_description=recovery');
+
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // ---------- Constants ----------
@@ -88,6 +94,11 @@ function cleanupSession() {
 // (it can deadlock the client). Defer with setTimeout.
 supabase.auth.onAuthStateChange((event) => {
   if (event === 'PASSWORD_RECOVERY') {
+    // Only the tab that actually opened the recovery link should
+    // show the recovery screen. Other tabs see this event too
+    // because auth state syncs via localStorage — ignore it there.
+    if (!IS_RECOVERY_TAB) return;
+
     inRecovery = true;
     showScreen('recovery');
     $('new-password').value = '';
@@ -184,7 +195,6 @@ $('recovery-form').addEventListener('submit', async (e) => {
     return;
   }
 
-  // Clear the recovery token from the URL and drop back into the app.
   inRecovery = false;
   window.history.replaceState(null, '', window.location.pathname);
   route();
@@ -254,17 +264,40 @@ function subscribeToFeed() {
     .on(
       'postgres_changes',
       { event: '*', schema: 'public', table: 'posts' },
-      () => loadFeed()
+      (payload) => {
+        // Any change to posts → refetch. Simpler than patching in place
+        // and always correct.
+        loadFeed();
+      }
     )
-    .subscribe();
+    .subscribe((status, err) => {
+      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+        console.error('Realtime channel error:', status, err);
+      } else if (status === 'SUBSCRIBED') {
+        console.log('Realtime connected.');
+      }
+    });
 }
 
+// Fallback: refetch whenever the tab regains focus. Covers the case
+// where realtime drops on a flaky connection.
+window.addEventListener('focus', () => {
+  if (currentUser && screens.app && !screens.app.classList.contains('hidden')) {
+    loadFeed();
+  }
+});
+
+let feedLoadToken = 0;
+
 async function loadFeed() {
+  const myToken = ++feedLoadToken;
   const { data, error } = await supabase
     .from('posts')
     .select('*')
     .order('created_at', { ascending: false })
     .limit(100);
+
+  if (myToken !== feedLoadToken) return;
 
   const feed = $('feed');
   feed.innerHTML = '';
@@ -295,6 +328,8 @@ async function loadFeed() {
     const { data: signed, error: signErr } = await supabase
       .storage.from('media')
       .createSignedUrls(mediaPaths, SIGNED_URL_TTL);
+
+    if (myToken !== feedLoadToken) return;
 
     if (!signErr && signed) {
       signed.forEach((item) => {
@@ -373,8 +408,6 @@ function renderPost(post, currentUid, signedUrls) {
 }
 
 async function deletePost(post) {
-  // Delete media file first (ignore failures — orphaned files are
-  // harmless and much better than orphaned post rows).
   if (post.media_path) {
     await supabase.storage.from('media').remove([post.media_path]);
   }
@@ -497,6 +530,9 @@ postBtn.addEventListener('click', async () => {
 
     postText.value = '';
     clearPendingFile();
+    // The realtime subscription will refetch. No manual loadFeed()
+    // here so we don't double-fetch — but if realtime is off, the
+    // focus fallback catches it on next tab focus.
   } catch (err) {
     alert("Couldn't post: " + err.message);
   } finally {
